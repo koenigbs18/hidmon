@@ -7,7 +7,7 @@ Simple library for monitoring HID (keyboard, mouse) events.
 ## Supported Targets
 
 * Windows
-    * Tested as working on Windows 
+    * Tested as working on Windows 11 Build 22631
 
 ## Example Usage
 
