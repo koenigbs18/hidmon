@@ -156,7 +156,7 @@ impl HidMonitor {
     ///         })
     ///         .expect("Failed to enable mouse monitoring");
     ///
-    ///     // Use HidMonitor's convenience function for handling WinApi functions
+    ///     // Use HidMonitor's convenience function for handling WinApi messages
     ///     HidMonitor::message_loop();
     /// }
     /// ```

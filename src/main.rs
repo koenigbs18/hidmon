@@ -12,6 +12,6 @@ fn main() {
         })
         .expect("Failed to enable mouse monitoring");
 
-    // Use HidMonitor's convience function for handling WinApi functions
+    // Use HidMonitor's convience function for handling WinApi messages
     HidMonitor::message_loop();
 }
