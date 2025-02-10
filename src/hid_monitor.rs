@@ -1,8 +1,8 @@
 use crate::Result;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, PeekMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-    HHOOK, MSG, PM_REMOVE, WM_QUIT,
+    DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK,
+    MSG, WM_QUIT,
 };
 
 #[allow(non_snake_case)]
@@ -110,12 +110,14 @@ impl HidMonitor {
         let mut msg = MSG::default();
         loop {
             let msg_ptr = std::ptr::from_mut::<MSG>(&mut msg);
-            if unsafe { PeekMessageW(msg_ptr, None, 0, 0, PM_REMOVE).0 } != 0 {
-                if msg.message == WM_QUIT {
-                    return;
+            unsafe {
+                if GetMessageW(msg_ptr, None, 0, 0).into() {
+                    let _ = TranslateMessage(msg_ptr);
+                    DispatchMessageW(msg_ptr);
                 }
-                let _ = unsafe { TranslateMessage(msg_ptr) };
-                unsafe { DispatchMessageW(msg_ptr) };
+            }
+            if msg.message == WM_QUIT {
+                return;
             }
         }
     }
