@@ -80,7 +80,7 @@ pub struct HidMonitor {
 impl Default for HidMonitor {
     /// Creates a new `HidMonitor` with all hooks disabled
     ///
-    /// To start monitoring call [`HidMonitor::start`]
+    /// To start monitoring call [`HidMonitor::enable`]
     fn default() -> Self {
         Self {
             keybd_hook: HHOOK::default(),

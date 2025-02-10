@@ -1,6 +1,6 @@
 [package]
 name = "hidmon"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lightweight, callback-based keyboard/mouse monitoring"
 authors = ["Brett Koenig <koenigbs18@outlook.com>"]
 repository = "https://github.com/koenigbs18/hidmon"
@@ -20,3 +20,6 @@ windows = { "version" = "0.59.0", features = [
 [lints.clippy]
 pedantic = "warn"
 nursery = "warn"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
