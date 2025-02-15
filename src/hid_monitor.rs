@@ -1,70 +1,10 @@
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
+
+use crate::globals::GlobalCallback;
 use crate::Result;
-use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK,
-    MSG, WM_QUIT,
-};
-
-#[allow(non_snake_case)]
-mod inner {
-    use super::{HidCallback, HidType, LPARAM, LRESULT, WPARAM};
-
-    use std::sync::{LazyLock, Mutex};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, HOOKPROC, WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOWS_HOOK_ID,
-    };
-    static GLOBAL_KEYBD_CALLBACK: LazyLock<Mutex<Option<HidCallback>>> =
-        LazyLock::new(|| Mutex::new(None));
-    static GLOBAL_MOUSE_CALLBACK: LazyLock<Mutex<Option<HidCallback>>> =
-        LazyLock::new(|| Mutex::new(None));
-
-    unsafe extern "system" fn KeyboardProc(nCode: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
-        let callback = *GLOBAL_KEYBD_CALLBACK.lock().unwrap();
-        if let Some(callback) = callback {
-            callback(nCode, wParam, lParam);
-        } else {
-            println!("HidMonitor: Keyboard callback was never set!");
-        }
-        CallNextHookEx(None, nCode, wParam, lParam)
-    }
-
-    unsafe extern "system" fn MouseProc(nCode: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
-        let callback = *GLOBAL_MOUSE_CALLBACK.lock().unwrap();
-        if let Some(callback) = callback {
-            callback(nCode, wParam, lParam);
-        } else {
-            println!("HidMonitor: Mouse callback was never set!");
-        }
-        CallNextHookEx(None, nCode, wParam, lParam)
-    }
-
-    impl From<HidType> for HOOKPROC {
-        fn from(value: HidType) -> Self {
-            match value {
-                HidType::Keyboard => Some(KeyboardProc),
-                HidType::Mouse => Some(MouseProc),
-            }
-        }
-    }
-    impl From<HidType> for WINDOWS_HOOK_ID {
-        fn from(value: HidType) -> Self {
-            match value {
-                HidType::Keyboard => WH_KEYBOARD_LL,
-                HidType::Mouse => WH_MOUSE_LL,
-            }
-        }
-    }
-    pub fn set_global_callback(r#type: HidType, callback: HidCallback) {
-        match r#type {
-            HidType::Keyboard => GLOBAL_KEYBD_CALLBACK.lock().unwrap().replace(callback),
-            HidType::Mouse => GLOBAL_MOUSE_CALLBACK.lock().unwrap().replace(callback),
-        };
-    }
-}
-
-use inner::set_global_callback;
-
-pub type HidCallback = fn(i32, WPARAM, LPARAM);
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::HHOOK;
 
 #[derive(Clone, Copy)]
 pub enum HidType {
@@ -72,9 +12,25 @@ pub enum HidType {
     Mouse,
 }
 
+pub enum HidEvent {
+    Keyboard {
+        time: SystemTime,
+        code: i32,
+        value: i32,
+    },
+    Mouse,
+}
+
+pub struct HidCallback(pub Arc<Mutex<dyn Call + Send>>);
+
+struct Hook {
+    hook: HHOOK,
+    global_callback: GlobalCallback,
+}
+
 pub struct HidMonitor {
-    keybd_hook: HHOOK,
-    mouse_hook: HHOOK,
+    keybd_hook: Option<Hook>,
+    mouse_hook: Option<Hook>,
 }
 
 impl Default for HidMonitor {
@@ -83,45 +39,13 @@ impl Default for HidMonitor {
     /// To start monitoring call [`HidMonitor::enable`]
     fn default() -> Self {
         Self {
-            keybd_hook: HHOOK::default(),
-            mouse_hook: HHOOK::default(),
+            keybd_hook: None,
+            mouse_hook: None,
         }
     }
 }
 
 impl HidMonitor {
-    fn hook(r#type: HidType, callback: HidCallback) -> Result<HHOOK> {
-        let hook;
-        unsafe {
-            hook = SetWindowsHookExW(r#type.into(), r#type.into(), None, 0)?;
-        }
-        set_global_callback(r#type, callback);
-        Ok(hook)
-    }
-
-    fn unhook(hook: HHOOK) -> Result<()> {
-        unsafe { Ok(UnhookWindowsHookEx(hook)?) }
-    }
-
-    /// Barebones WINAPI message handler
-    ///
-    /// Exits if it receives a `WM_QUIT` message.
-    pub fn message_loop() {
-        let mut msg = MSG::default();
-        loop {
-            let msg_ptr = std::ptr::from_mut::<MSG>(&mut msg);
-            unsafe {
-                if GetMessageW(msg_ptr, None, 0, 0).into() {
-                    let _ = TranslateMessage(msg_ptr);
-                    DispatchMessageW(msg_ptr);
-                }
-            }
-            if msg.message == WM_QUIT {
-                return;
-            }
-        }
-    }
-
     /// Enables HID monitoring for a given `HidType`
     ///
     /// To stop monitoring call [`HidMonitor::disable`]
@@ -134,8 +58,6 @@ impl HidMonitor {
     ///       unresponsive!  For maximum safety, ensure the message loop is running **before** enabling any hooks, or shortly after.
     ///       For applications which otherwise do not care about handling `WinApi` messages, [`HidMonitor::message_loop`] serves
     ///       as a convenience function for starting a simple message handler.
-    ///     * Only one unique `HidType` can be monitored per running process.  For example, attempting to start multiple
-    ///       `HidMonitor`'s with `HidType::Mouse` will result in an error.
     ///     * Read more about the implications of this function on the `WinApi` documentation for
     ///       [`SetWindowsHookExA`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowshookexa#remarks)
     ///
@@ -166,12 +88,15 @@ impl HidMonitor {
     /// ## Errors
     ///
     /// Windows: Only one unique `HidType` can be monitored per running process.
-    pub fn enable(&mut self, r#type: HidType, callback: HidCallback) -> Result<()> {
-        let hook = Self::hook(r#type, callback)?;
-        match r#type {
-            HidType::Keyboard => self.keybd_hook = hook,
-            HidType::Mouse => self.mouse_hook = hook,
+    pub fn enable(&mut self, hid_type: HidType, callback: HidCallback) -> Result<()> {
+        match hid_type {
+            HidType::Keyboard => &mut self.keybd_hook,
+            HidType::Mouse => &mut self.mouse_hook,
         }
+        .replace((
+            Self::hook(hid_type)?,
+            GlobalCallback::new(hid_type, callback),
+        ));
         Ok(())
     }
 
@@ -181,18 +106,14 @@ impl HidMonitor {
     ///
     /// Windows: [`UnhookWindowsHookEx`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-unhookwindowshookex)
     /// returned an error
-    pub fn disable(&mut self, r#type: HidType) -> Result<()> {
-        match r#type {
-            HidType::Keyboard => {
-                Self::unhook(self.keybd_hook)?;
-                self.keybd_hook = HHOOK::default();
-            }
-            HidType::Mouse => {
-                Self::unhook(self.mouse_hook)?;
-                self.mouse_hook = HHOOK::default();
-            }
+    pub fn disable(&mut self, hid_type: HidType) -> Result<()> {
+        if let Some(hook) = match hid_type {
+            HidType::Keyboard => &mut self.keybd_hook,
+            HidType::Mouse => &mut self.mouse_hook,
+        } {
+            Self::unhook(hook.0)?;
         }
-        Ok(())
+        hook.Ok(())
     }
 }
 
