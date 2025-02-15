@@ -1,10 +1,10 @@
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 
 use crate::globals::GlobalCallback;
+use crate::traits::Call;
+use crate::windows;
 use crate::Result;
-use windows::Win32::Foundation::{LPARAM, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::HHOOK;
+use ::windows::Win32::UI::WindowsAndMessaging::HHOOK;
 
 #[derive(Clone, Copy)]
 pub enum HidType {
@@ -12,20 +12,30 @@ pub enum HidType {
     Mouse,
 }
 
-pub enum HidEvent {
-    Keyboard {
-        time: SystemTime,
-        code: i32,
-        value: i32,
-    },
-    Mouse,
-}
+// enum HidEvent {
+//     Keyboard {
+//         time: SystemTime,
+//         code: i32,
+//         value: i32,
+//     },
+//     Mouse,
+// }
 
 pub struct HidCallback(pub Arc<Mutex<dyn Call + Send>>);
 
 struct Hook {
     hook: HHOOK,
+    #[allow(dead_code)]
     global_callback: GlobalCallback,
+}
+
+impl Hook {
+    const fn new(hook: HHOOK, global_callback: GlobalCallback) -> Self {
+        Self {
+            hook,
+            global_callback,
+        }
+    }
 }
 
 pub struct HidMonitor {
@@ -61,8 +71,6 @@ impl HidMonitor {
     ///     * Read more about the implications of this function on the `WinApi` documentation for
     ///       [`SetWindowsHookExA`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowshookexa#remarks)
     ///
-    ///
-    ///
     /// ## Usage
     ///
     /// ```Rust
@@ -87,14 +95,14 @@ impl HidMonitor {
     ///
     /// ## Errors
     ///
-    /// Windows: Only one unique `HidType` can be monitored per running process.
+    /// Platform dependent error
     pub fn enable(&mut self, hid_type: HidType, callback: HidCallback) -> Result<()> {
         match hid_type {
             HidType::Keyboard => &mut self.keybd_hook,
             HidType::Mouse => &mut self.mouse_hook,
         }
-        .replace((
-            Self::hook(hid_type)?,
+        .replace(Hook::new(
+            windows::hook(hid_type)?,
             GlobalCallback::new(hid_type, callback),
         ));
         Ok(())
@@ -111,19 +119,16 @@ impl HidMonitor {
             HidType::Keyboard => &mut self.keybd_hook,
             HidType::Mouse => &mut self.mouse_hook,
         } {
-            Self::unhook(hook.0)?;
+            windows::unhook(hook.hook)?;
+            *self = Self::default();
         }
-        hook.Ok(())
+        Ok(())
     }
 }
 
 impl Drop for HidMonitor {
     fn drop(&mut self) {
-        if !self.keybd_hook.is_invalid() {
-            let _ = Self::unhook(self.keybd_hook);
-        }
-        if !self.mouse_hook.is_invalid() {
-            let _ = Self::unhook(self.mouse_hook);
-        }
+        let _ = self.disable(HidType::Keyboard);
+        let _ = self.disable(HidType::Mouse);
     }
 }

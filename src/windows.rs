@@ -13,7 +13,7 @@ use crate::{
     HidType, Result,
 };
 
-unsafe extern "system" fn LowLevelKeyboardProc(
+pub unsafe extern "system" fn LowLevelKeyboardProc(
     ncode: i32,
     wparam: WPARAM,
     lparam: LPARAM,
@@ -29,12 +29,15 @@ unsafe extern "system" fn LowLevelKeyboardProc(
     CallNextHookEx(None, ncode, wparam, lparam)
 }
 
-unsafe extern "system" fn LowLevelMouseProc(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+pub unsafe extern "system" fn LowLevelMouseProc(
+    ncode: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     if ncode < 0 {
         return CallNextHookEx(None, ncode, wparam, lparam);
     }
     let callback_map = GLOBAL_MOUSE_CALLBACKS.lock().unwrap();
-    println!("Callbacks #: {}", callback_map.len());
     for entry in &mut callback_map.values() {
         entry.0.lock().unwrap().callback(ncode, wparam, lparam);
     }
@@ -42,7 +45,7 @@ unsafe extern "system" fn LowLevelMouseProc(ncode: i32, wparam: WPARAM, lparam: 
     CallNextHookEx(None, ncode, wparam, lparam)
 }
 
-fn hook(hid_type: HidType) -> Result<HHOOK> {
+pub fn hook(hid_type: HidType) -> Result<HHOOK> {
     unsafe {
         Ok(SetWindowsHookExW(
             hid_type.into(),
@@ -53,7 +56,7 @@ fn hook(hid_type: HidType) -> Result<HHOOK> {
     }
 }
 
-fn unhook(hook: HHOOK) -> Result<()> {
+pub fn unhook(hook: HHOOK) -> Result<()> {
     unsafe { Ok(UnhookWindowsHookEx(hook)?) }
 }
 
@@ -77,6 +80,7 @@ impl From<HidType> for WINDOWS_HOOK_ID {
 /// Barebones WINAPI message handler
 ///
 /// Exits if it receives a `WM_QUIT` message.
+#[allow(dead_code)]
 pub fn message_loop() {
     let mut msg = MSG::default();
     loop {

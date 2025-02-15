@@ -31,10 +31,8 @@ impl GlobalCallback {
         let mut rng = rand::rng();
         loop {
             let key = rng.random::<Key>();
-            if !callback_map.contains_key(&key) {
-                callback_map
-                    .insert(key, callback)
-                    .expect("Global callback entry must have a unique key");
+            if let std::collections::hash_map::Entry::Vacant(e) = callback_map.entry(key) {
+                e.insert(callback);
                 break Self { hid_type, key };
             }
         }
