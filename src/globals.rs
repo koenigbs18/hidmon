@@ -31,8 +31,8 @@ impl GlobalCallback {
         let mut rng = rand::rng();
         loop {
             let key = rng.random::<Key>();
-            if let std::collections::hash_map::Entry::Vacant(e) = callback_map.entry(key) {
-                e.insert(callback);
+            if let std::collections::hash_map::Entry::Vacant(entry) = callback_map.entry(key) {
+                entry.insert(callback);
                 break Self { hid_type, key };
             }
         }

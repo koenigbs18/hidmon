@@ -35,16 +35,19 @@ impl Call for MyType2 {
 
 fn main() {
     // Create new HidMonitor with no hooks enabled
-    let mut hid_monitor = HidMonitor::default();
+    let mut hid_monitor_1 = HidMonitor::default();
+    let mut hid_monitor_2 = HidMonitor::default();
     let my_type_1 = Arc::new(Mutex::new(MyType1::default()));
     let my_type_2 = Arc::new(Mutex::new(MyType2::default()));
 
-    hid_monitor
-        .enable(HidType::Mouse, HidCallback(my_type_1))
+    hid_monitor_1
+        .add_callback(HidType::Mouse, HidCallback(my_type_1))
+        .enable(HidType::Mouse)
         .expect("Error enabling mouse monitoring for MyType1");
 
-    hid_monitor
-        .enable(HidType::Mouse, HidCallback(my_type_2))
+    hid_monitor_2
+        .add_callback(HidType::Mouse, HidCallback(my_type_2))
+        .enable(HidType::Mouse)
         .expect("Error enabling mouse monitoring for MyType2");
 
     // Convience function for handling WinApi messages
