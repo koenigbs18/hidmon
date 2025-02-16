@@ -2,7 +2,7 @@
 
 # HIDMON
 
-Simple library for monitoring HID (keyboard, mouse) events.
+Simple library for monitoring HID (keyboard, mouse) events via callbacks.
 
 ## Supported Targets
 
@@ -13,13 +13,12 @@ Simple library for monitoring HID (keyboard, mouse) events.
 
 See `src/main.rs`
 
-## Limitations
+## Limitations/Warnings
 
 * **Windows**
 
-    * You ***MUST*** have a [message loop](https://learn.microsoft.com/en-us/windows/win32/winmsg/using-messages-and-message-queues#creating-a-message-loop) running on the same thread as the `HidMonitor` hooks enabled by this function, otherwise your system may become unresponsive!  For maximum safety, ensure the message loop is running **before** enabling any hooks, or shortly after.  For applications which otherwise do not care about handling `WinApi` messages, [`HidMonitor::message_loop`] serves as a convenience function for starting a simple message handler.
-    * Only one unique `HidType` can be monitored per running process.  For example, attempting to start multiple `HidMonitor`'s with `HidType::Mouse` will result in an error.
-    * Read more about the implications of this function on the `WinApi` documentation for [`SetWindowsHookExA`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowshookexa#remarks)
+    * You ***MUST*** have a [message loop](https://learn.microsoft.com/en-us/windows/win32/winmsg/using-messages-and-message-queues#creating-a-message-loop) running on the same thread as any `HidMonitor` before calling `HidMonitor::enable`, otherwise your system may become unresponsive!  For maximum safety, ensure the message loop is running **before** enabling any hooks, or shortly after.  For applications which otherwise do not care about handling `WinApi` messages, [`HidMonitor::message_loop`] serves as a convenience function for starting a simple message handler.
+    * Read more about the implications of `HidMonitor::enable` on the `WinApi` documentation for [`SetWindowsHookExA`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowshookexa#remarks)
 
 * **Unix**
 
@@ -29,8 +28,7 @@ See `src/main.rs`
 
 * Unix support
 * Unit testing
-* Support for multiple callbacks for a given HID type
-* Support for user data in callbacks
+* Handle panics that occur inside inside user-defined callbacks (and documentation on this behavior)
 
 ## License
 
